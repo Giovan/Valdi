@@ -37,9 +37,16 @@ export function drawFrame(native: SnapDrawingValdiContextNative): SnapDrawingFra
 
 export function disposeFrame(native: SnapDrawingFrameNative): void;
 
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export function rasterFrame(
   native: SnapDrawingFrameNative,
   bitmapNative: INativeBitmap,
   shouldClearBitmapBeforeDrawing: boolean,
   deltaRasterization: boolean,
-): void;
+): Rect[];

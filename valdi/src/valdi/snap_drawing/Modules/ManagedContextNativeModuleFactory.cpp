@@ -22,6 +22,7 @@
 #include "valdi/snap_drawing/Utils/ValdiUtils.hpp"
 #include "valdi_core/cpp/Interfaces/IBitmap.hpp"
 #include "valdi_core/cpp/Utils/StringCache.hpp"
+#include "valdi_core/cpp/Utils/ValueArrayBuilder.hpp"
 #include "valdi_core/cpp/Utils/ValueFunctionWithMethod.hpp"
 #include "valdi_core/cpp/Utils/ValueTypedArray.hpp"
 #include <cstdint>
@@ -359,7 +360,18 @@ Valdi::Value ManagedContextNativeModuleFactory::rasterFrame(const Valdi::ValueFu
         return Valdi::Value();
     }
 
-    return Valdi::Value();
+    // Convert damage rects to JavaScript array
+    Valdi::ValueArrayBuilder damageRectsArray;
+    for (const auto& rect : result.value().damageRects) {
+        Valdi::Value rectObject;
+        rectObject.setMapValue("x", Valdi::Value(rect.x()));
+        rectObject.setMapValue("y", Valdi::Value(rect.y()));
+        rectObject.setMapValue("width", Valdi::Value(rect.width()));
+        rectObject.setMapValue("height", Valdi::Value(rect.height()));
+        damageRectsArray.append(std::move(rectObject));
+    }
+
+    return Valdi::Value(damageRectsArray.build());
 }
 
 } // namespace snap::drawing

@@ -4,7 +4,7 @@ import { jsx } from 'valdi_core/src/JSXBootstrap';
 import { Renderer } from 'valdi_core/src/Renderer';
 import { Size } from './DrawingModuleProvider';
 import { IBitmap } from './IBitmap';
-import { IManagedContext, IManagedContextAssetsLoadResult, IManagedContextFrame, MeasureMode } from './IManagedContext';
+import { IManagedContext, IManagedContextAssetsLoadResult, IManagedContextFrame, MeasureMode, RasterResult } from './IManagedContext';
 import { ManagedContextAssetTracker } from './ManagedContextAssetTracker';
 import {
   AssetTrackerEventType,
@@ -26,12 +26,14 @@ class FrameImpl implements IManagedContextFrame {
     disposeFrame(this.native);
   }
 
-  rasterInto(bitmap: IBitmap, shouldClearBitmapBeforeDrawing: boolean): void {
-    rasterFrame(this.native, bitmap.native, shouldClearBitmapBeforeDrawing, false);
+  rasterInto(bitmap: IBitmap, shouldClearBitmapBeforeDrawing: boolean): RasterResult {
+    const damageRects = rasterFrame(this.native, bitmap.native, shouldClearBitmapBeforeDrawing, false);
+    return { damageRects };
   }
 
-  rasterDeltaInto(bitmap: IBitmap): void {
-    rasterFrame(this.native, bitmap.native, false, true);
+  rasterDeltaInto(bitmap: IBitmap): RasterResult {
+    const damageRects = rasterFrame(this.native, bitmap.native, false, true);
+    return { damageRects };
   }
 }
 

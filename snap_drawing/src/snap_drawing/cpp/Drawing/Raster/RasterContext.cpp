@@ -77,7 +77,7 @@ Valdi::Result<RasterContext::RasterResult> RasterContext::raster(const Ref<Displ
     if (_deltaRasterizationEnabled) {
         std::lock_guard<std::recursive_mutex> lock(_mutex);
 
-        auto damageRects = computeDamageRects(displayList, inputBitmapInfo);
+        output.damageRects = computeDamageRects(displayList, inputBitmapInfo);
 
         if (needsNewBitmap(inputBitmapInfo)) {
             // Cannot do a delta raster if the input bitmap info has changed
@@ -103,7 +103,7 @@ Valdi::Result<RasterContext::RasterResult> RasterContext::raster(const Ref<Displ
                 return result.moveError();
             }
         } else {
-            auto result = doRasterDelta(composition, _lastBitmap, inputBitmapInfo, damageRects, rasterId);
+            auto result = doRasterDelta(composition, _lastBitmap, inputBitmapInfo, output.damageRects, rasterId);
             if (!result) {
                 return result.moveError();
             }
@@ -220,6 +220,10 @@ Valdi::Result<RasterContext::RasterResult> RasterContext::rasterDelta(const Ref<
     auto result = doRasterDelta(composition, bitmap, bitmap->getInfo(), damageRects, rasterId);
 
     removeUnusedCachedRasterizedExternalSurfaces(rasterId);
+
+    if (result) {
+        result.value().damageRects = std::move(damageRects);
+    }
 
     return result;
 }

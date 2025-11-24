@@ -1,11 +1,16 @@
 import { IRenderer } from 'valdi_core/src/IRenderer';
 import { Size } from './DrawingModuleProvider';
 import { IBitmap } from './IBitmap';
+import type { Rect } from './ManagedContextNative';
 
 export const enum MeasureMode {
   UNSPECIFIED = 0,
   EXACTLY = 1,
   AT_MOST = 2,
+}
+
+export interface RasterResult {
+  damageRects: Rect[];
 }
 
 export interface IManagedContextAssetsLoadResult {
@@ -63,11 +68,11 @@ export interface IManagedContextFrame {
   /**
    * Rasterize the frame into a bitmap provided as an array buffer.
    */
-  rasterInto(bitmap: IBitmap, shouldClearBitmapBeforeDrawing: boolean): void;
+  rasterInto(bitmap: IBitmap, shouldClearBitmapBeforeDrawing: boolean): RasterResult;
 
   /**
    * Rasterize the frame into a bitmap provided as an array buffer.
    * Only the areas that have changed since the last rasterization will be rasterized.
    */
-  rasterDeltaInto(bitmap: IBitmap): void;
+  rasterDeltaInto(bitmap: IBitmap): RasterResult;
 }
