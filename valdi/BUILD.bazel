@@ -711,6 +711,7 @@ valdi_test(
     deps = [
         ":test_utils",
         ":valdi_runtime",
+        "//valdi/testdata/resources/modules/test:test_cpp",
     ],
 )
 

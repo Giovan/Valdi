@@ -542,25 +542,22 @@ private:
     R (*_callable)(void*, A...) = nullptr;
 };
 
-template<typename T>
-T unmarshallCppFunctionArgument(ExceptionTracker& exceptionTracker,
-                                const ValueFunctionCallContext& callContext,
-                                size_t& parameterIndex) {
+template<typename T, std::size_t index>
+inline T unmarshallCppFunctionArgument(ExceptionTracker& exceptionTracker,
+                                       const ValueFunctionCallContext& callContext) {
     auto out = T();
     if (exceptionTracker) {
-        CppMarshaller::unmarshall(callContext.getExceptionTracker(), callContext.getParameter(parameterIndex), out);
+        CppMarshaller::unmarshall(callContext.getExceptionTracker(), callContext.getParameter(index), out);
     }
-    parameterIndex++;
-
     return out;
 }
 
-template<typename R, typename... A, typename F>
-Value handleCppFunctionCall(const F& callable, const ValueFunctionCallContext& callContext) {
+template<typename R, typename F, typename... A, std::size_t... indices>
+inline Value handleCppFunctionCallImpl(const F& callable,
+                                       const ValueFunctionCallContext& callContext,
+                                       std::index_sequence<indices...> /*unused*/) {
     auto& exceptionTracker = callContext.getExceptionTracker();
-    size_t parameterIndex = 0;
-    auto parameters =
-        std::make_tuple<A...>(unmarshallCppFunctionArgument<A>(exceptionTracker, callContext, parameterIndex)...);
+    auto parameters = std::tuple<A...>{unmarshallCppFunctionArgument<A, indices>(exceptionTracker, callContext)...};
     if (!exceptionTracker) {
         return Value::undefined();
     }
@@ -587,6 +584,11 @@ Value handleCppFunctionCall(const F& callable, const ValueFunctionCallContext& c
 
         return out;
     }
+}
+
+template<typename R, typename... A, typename F>
+Value handleCppFunctionCall(const F& callable, const ValueFunctionCallContext& callContext) {
+    return handleCppFunctionCallImpl<R, F, A...>(callable, callContext, std::index_sequence_for<A...>{});
 }
 
 template<typename R, typename... A>

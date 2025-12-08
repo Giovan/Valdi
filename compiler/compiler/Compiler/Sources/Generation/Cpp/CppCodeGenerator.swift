@@ -57,7 +57,8 @@ struct CPPTypeNameResolver: CustomStringConvertible {
 
         static let const = Specifiers(rawValue: 1 << 0)
         static let ref = Specifiers(rawValue: 1 << 1)
-        static let ptr = Specifiers(rawValue: 1 << 2)
+        static let rValueRef = Specifiers(rawValue: 1 << 2)
+        static let ptr = Specifiers(rawValue: 1 << 3)
 
         static let constRef: Specifiers = [.const, .ref]
     }
@@ -74,6 +75,8 @@ struct CPPTypeNameResolver: CustomStringConvertible {
                 output += " &"
             } else if specifiers.contains(.ptr) {
                 output += " *"
+            } else if specifiers.contains(.rValueRef) {
+                output += " &&"
             }
 
             return output

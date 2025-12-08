@@ -152,7 +152,7 @@ final class CppModelGenerator {
                 }
 
                 classWriter.writeMethod(name: cppProperty.name.setterName,
-                                        arguments: [CPPFunctionArgument(typeResolver: cppProperty.typeParser.typeNameResolver, name: "value")],
+                                        arguments: [CPPFunctionArgument(typeResolver: .with(specifiers: .rValueRef, cppProperty.typeParser.typeNameResolver), name: "value")],
                                         returnType: .with(typeName: "void"),
                                         specifiers: nil) { writer in
                     writer.appendBody("\(cppProperty.name.fieldName) = std::move(value);\n")

@@ -5,6 +5,7 @@
 #include "valdi_core/cpp/Schema/ValueSchemaRegistry.hpp"
 #include "valdi_core/cpp/Utils/ValueFunctionWithCallable.hpp"
 #include "valdi_core/cpp/Utils/ValueTypedProxyObject.hpp"
+#include "valdi_modules/test/test.hpp"
 #include <cstddef>
 #include <gtest/gtest.h>
 
@@ -776,6 +777,66 @@ TEST(CppGeneratedClass, canUnmarshallGenericObject) {
     ASSERT_EQ(24, card.width);
     ASSERT_EQ(50, card.height);
     ASSERT_EQ(false, card.selected);
+}
+
+TEST(CppGeneratedClass, canCopyGeneratedModel) {
+    auto model = snap::valdi_modules::test::MyModel(42, STRING_LITERAL("Hello World"), true);
+
+    ASSERT_EQ(42, model.getI());
+    ASSERT_EQ(STRING_LITERAL("Hello World"), model.getS());
+    ASSERT_EQ(true, model.getB());
+
+    // Copy constructor
+    auto copiedModel = model;
+
+    ASSERT_EQ(42, copiedModel.getI());
+    ASSERT_EQ(STRING_LITERAL("Hello World"), copiedModel.getS());
+    ASSERT_EQ(true, copiedModel.getB());
+
+    copiedModel.setI(12);
+
+    copiedModel.setS(STRING_LITERAL("Goodbye"));
+    copiedModel.setB(false);
+
+    // Copy assignment
+    model = copiedModel;
+
+    ASSERT_EQ(12, model.getI());
+    ASSERT_EQ(STRING_LITERAL("Goodbye"), model.getS());
+    ASSERT_EQ(false, model.getB());
+}
+
+TEST(CppGeneratedClass, canMoveGeneratedModel) {
+    auto model = snap::valdi_modules::test::MyModel(42, STRING_LITERAL("Hello World"), true);
+
+    ASSERT_EQ(42, model.getI());
+    ASSERT_EQ(STRING_LITERAL("Hello World"), model.getS());
+    ASSERT_EQ(true, model.getB());
+
+    // Copy constructor
+    auto movedModel = std::move(model);
+
+    ASSERT_EQ(42, movedModel.getI());
+    ASSERT_EQ(STRING_LITERAL("Hello World"), movedModel.getS());
+    ASSERT_EQ(true, movedModel.getB());
+
+    ASSERT_EQ(42, model.getI());
+    ASSERT_EQ(STRING_LITERAL(""), model.getS());
+    ASSERT_EQ(true, model.getB());
+
+    movedModel.setI(12);
+    movedModel.setB(false);
+
+    // Copy assignment
+    model = std::move(movedModel);
+
+    ASSERT_EQ(12, model.getI());
+    ASSERT_EQ(STRING_LITERAL("Hello World"), model.getS());
+    ASSERT_EQ(false, model.getB());
+
+    ASSERT_EQ(12, movedModel.getI());
+    ASSERT_EQ(STRING_LITERAL(""), movedModel.getS());
+    ASSERT_EQ(false, movedModel.getB());
 }
 
 } // namespace ValdiTest
