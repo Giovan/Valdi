@@ -6,6 +6,7 @@ set -x
 echo "Updating Valdi compiler..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+CLIENT_ROOT_DIR="$SCRIPT_DIR/../../../../../"
 BASE_PATH="${SCRIPT_DIR}/../Compiler"
 OUTPUT_FILENAME="Compiler"
 ENTITLEMENTS_PATH="$SCRIPT_DIR/entitlements.plist"
@@ -128,12 +129,17 @@ fi
 
 if [[ "$IS_LINUX" = true ]]; then
     OUT_DIR="$bin_output_path/linux"
+    SHA256_VAR_NAME="VALDI_COMPILER_LINUX_SHA256"
 else
     OUT_DIR="$bin_output_path/macos"
+    SHA256_VAR_NAME="VALDI_COMPILER_MACOS_SHA256"
 fi
+
+(
+cd $CLIENT_ROOT_DIR
+source src/composer/jenkins/jenkins_helpers.sh
 
 mkdir -p "$OUT_DIR"
 rm -f "$OUT_DIR/valdi_compiler"
 cp "$OUTPUT_FILE_PATH" "$OUT_DIR/valdi_compiler"
-
-echo "All done."
+)
