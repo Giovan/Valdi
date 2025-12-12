@@ -653,7 +653,8 @@ public:
                 return this->handleUnmarshallMapError(exceptionTracker);
             }
 
-            this->_delegate->setES6CollectionEntry(map, CollectionType::Map, {key, value}, exceptionTracker);
+            this->_delegate->setES6CollectionEntry(
+                map, CollectionType::Map, {std::move(key), std::move(value)}, exceptionTracker);
 
             if (!exceptionTracker) {
                 return this->handleUnmarshallMapError(exceptionTracker);
@@ -743,7 +744,7 @@ public:
             if (!exceptionTracker) {
                 return this->handleUnmarshallSetError(exceptionTracker);
             }
-            this->_delegate->setES6CollectionEntry(set, CollectionType::Set, {key}, exceptionTracker);
+            this->_delegate->setES6CollectionEntry(set, CollectionType::Set, {std::move(key)}, exceptionTracker);
             if (!exceptionTracker) {
                 return this->handleUnmarshallSetError(exceptionTracker);
             }
