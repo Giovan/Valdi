@@ -3168,10 +3168,8 @@ void JavaScriptRuntime::preloadModule(const StringBox& path, int32_t maxDepth) {
 
 std::shared_ptr<snap::valdi_core::JSRuntimeNativeObjectsManager> JavaScriptRuntime::createNativeObjectsManager(
     const std::string& scopeName) {
-    // scopeName is passed from native callers to identify the source of errors.
-    // Currently not stored on the context, but available for future use.
-    (void)scopeName; // Suppress unused parameter warning
-    auto context = _contextManager.createContext(nullptr, nullptr, /* deferRender */ true);
+    auto scopeNameBox = scopeName.empty() ? StringBox() : StringCache::getGlobal().makeString(scopeName);
+    auto context = _contextManager.createContext(nullptr, nullptr, /* deferRender */ true, scopeNameBox);
 
     return makeShared<JSRuntimeNativeObjectsManagerImpl>(_contextManager, std::move(context));
 }

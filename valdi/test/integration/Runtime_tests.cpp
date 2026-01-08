@@ -6760,6 +6760,44 @@ TEST_P(RuntimeFixture, showStackTraceResponsibleForEmittingDanglingReference) {
     ASSERT_EQ(static_cast<size_t>(1), messageHandler->messages().debugMessages.size());
 }
 
+TEST_P(RuntimeFixture, scopeNameAppearsInDisposedReferenceError) {
+    auto messageHandler = makeShared<MockRuntimeMessageHandler>();
+    wrapper.runtime->setRuntimeMessageHandler(messageHandler);
+
+    Ref<MyNativeObject> nativeObject = makeShared<MyNativeObject>();
+
+    // Create objectsManager with a specific scopeName
+    auto objectsManager =
+        wrapper.runtime->getJavaScriptRuntime()->createNativeObjectsManager("MyFeature.MyCallsite");
+
+    // Wrap native object in JS
+    auto jsResult =
+        callFunctionSync(wrapper, objectsManager, "test/src/WrapNativeObject", "wrapper", {Value(nativeObject)});
+    ASSERT_TRUE(jsResult) << jsResult.description();
+
+    auto unwrapObject = [&]() {
+        // Call the function - we expect it to fail, so don't call .value() on the result
+        // The error will be logged to messageHandler
+        (void)jsResult.value().getFunction()->call(Valdi::ValueFunctionFlagsCallSync, {});
+    };
+
+    // Dispose the objectsManager
+    wrapper.runtime->getJavaScriptRuntime()->dispatchSynchronouslyOnJsThread([&](auto& jsEntry) {
+        wrapper.runtime->getJavaScriptRuntime()->destroyNativeObjectsManager(objectsManager);
+        return;
+    });
+
+    // Try to unwrap - should trigger error with scopeName (error is logged, not thrown)
+    unwrapObject();
+    wrapper.flushQueues();
+
+    // Verify error contains scopeName
+    ASSERT_GE(messageHandler->messages().errors.size(), static_cast<size_t>(1));
+    auto errorMessage = messageHandler->messages().errors[0].second;
+    ASSERT_TRUE(errorMessage.contains("MyFeature.MyCallsite"))
+        << "Expected error message to contain scopeName 'MyFeature.MyCallsite', got: " << errorMessage.slowToString();
+}
+
 TEST_P(RuntimeFixture, supportsSingleCallJsFunction) {
     auto getCallbackFn =
         getJsModulePropertyWithSchema(wrapper.runtime, "test/src/SingleCall", "getCallback", "f():f!():s");
