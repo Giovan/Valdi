@@ -943,21 +943,12 @@ def npm_package_target_for_target(name):
     return label.relative(":" + npm_package_target_name(label.name))
 
 def _exported_objc_lib(name, ios_module_name, objc_hdrs, objc_srcs, single_file_codegen, **kwargs):
-    internal_umbrella_header_name = name + "_umbrella.h"
-    umbrella_header(
-        name = internal_umbrella_header_name,
-        hdrs = objc_hdrs,
-        umbrella_header_name = ios_module_name + "-Swift",
-        tags = ["manual"],
-    )
-    umbrella_headers = [":" + internal_umbrella_header_name]
-
     # setup headermaps
     if single_file_codegen:
-        hmap_hdrs = objc_hdrs + umbrella_headers
+        hmap_hdrs = objc_hdrs
         hmap_header_tree_providers = []
     else:
-        hmap_hdrs = umbrella_headers
+        hmap_hdrs = []
         hmap_header_tree_providers = objc_hdrs
 
     hmap_name = name + "_valdi_module_hmap"
@@ -993,6 +984,20 @@ def _exported_objc_lib(name, ios_module_name, objc_hdrs, objc_srcs, single_file_
     # execroot, so we pass '-I.' to correctly resolve hmap header paths.
     # -I. needs to come last after all .hmap includes
     hmap_copts.append("-I.")
+
+    # The umbrella header is a public header
+    # Umbrella headers for ObjC libraries are meant to only be imported
+    # from -Swift.h generated headers (replacing modular @import).
+    # The -Swift.h headers use workspace-relative imports of umbrella
+    # headers and exposing it via headermap is not necessary.
+    internal_umbrella_header_name = name + "_umbrella.h"
+    umbrella_header(
+        name = internal_umbrella_header_name,
+        hdrs = objc_hdrs,
+        umbrella_header_name = ios_module_name + "-Swift",
+        tags = ["manual"],
+    )
+    umbrella_headers = [":" + internal_umbrella_header_name]
 
     client_objc_library(
         name = name,
