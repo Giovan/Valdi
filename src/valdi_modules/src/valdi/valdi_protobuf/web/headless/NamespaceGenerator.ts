@@ -1,9 +1,39 @@
 import { Message as ValdiMessage } from '../Message';
 import { IArena, IMessage, IMessageNamespace, JSONPrintOptions } from '../src_symlink/types';
 import { FullyQualifiedName } from './FullyQualifiedName';
-import { IMessageType } from '@protobuf-ts/runtime';
+import { IMessageType, PbLong, PbULong } from '@protobuf-ts/runtime';
 import { DescriptorDatabase } from './DescriptorDatabase';
 import { INativeMessageIndex } from '../src_symlink/ValdiProtobuf';
+
+// Monkey-patch PbLong to accept Long objects from long.js
+// @protobuf-ts uses PbLong.from() to convert values to their internal long representation
+// We extend it to handle Long objects by converting them to string/number first
+const originalPbLongFrom = PbLong.from;
+const originalPbULongFrom = PbULong.from;
+
+PbLong.from = function(value: any): any {
+  // If it's a Long object, convert it to a primitive
+  if (value && typeof value === 'object' && 'low' in value && 'high' in value && 'unsigned' in value) {
+    const num = value.toNumber?.();
+    if (num !== undefined && Number.isSafeInteger(num)) {
+      return originalPbLongFrom.call(this, num);
+    }
+    return originalPbLongFrom.call(this, value.toString?.() ?? value);
+  }
+  return originalPbLongFrom.call(this, value);
+};
+
+PbULong.from = function(value: any): any {
+  // If it's a Long object, convert it to a primitive
+  if (value && typeof value === 'object' && 'low' in value && 'high' in value && 'unsigned' in value) {
+    const num = value.toNumber?.();
+    if (num !== undefined && Number.isSafeInteger(num) && num >= 0) {
+      return originalPbULongFrom.call(this, num);
+    }
+    return originalPbULongFrom.call(this, value.toString?.() ?? value);
+  }
+  return originalPbULongFrom.call(this, value);
+};
 
 export interface IMonkeyPatchedProtobufJsNamespace {
   [key: string]: IMessageNamespace | IMonkeyPatchedProtobufJsNamespace;
@@ -101,7 +131,9 @@ function populateNamespaceFromMessageType(
   };
 
   namespace.encode = (value: IMessage | any): Uint8Array => {
-    return messageType.toBinary(unwrapData(value));
+    const unwrapped = unwrapData(value);
+    const normalized = messageType.create(unwrapped);
+    return messageType.toBinary(normalized);
   };
 
   namespace.encodeAsync = (value: IMessage | any): Promise<Uint8Array> => {

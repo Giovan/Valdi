@@ -24,7 +24,6 @@ genrule(
 )
 
 # Web code - production and tests compiled together
-# No npm deps specified so this can build in external workspaces without @valdi_npm
 ts_project(
     name = "valdi_protobuf_web_compiled",
     srcs = glob(
@@ -49,6 +48,9 @@ ts_project(
     supports_workers = -1,
     transpiler = "tsc",
     tsconfig = "web/tsconfig.json",
+    deps = [
+        "//bzl/valdi/npm:node_modules/@protobuf-ts/runtime",
+    ],
 )
 
 # Expose compiled files at web/ path for valdi_module consumption
@@ -98,7 +100,7 @@ valdi_module(
     ],
 )
 
-# Link npm packages for web tests - at the end so external workspaces can skip this
+# Link npm packages for web build and tests
 npm_link_all_packages(name = "node_modules")
 
 # Web tests - require npm packages so only work in valdi workspace
