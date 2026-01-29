@@ -1,0 +1,167 @@
+name: Bazel Config & CI Tools Tests
+
+on:
+  pull_request:
+    paths:
+      - '**/*.bzl'
+      - '**/BUILD.bazel'
+      - '**/BUILD'
+      - 'MODULE.bazel'
+      - 'WORKSPACE'
+      - 'tools/ci/**'
+      - 'npm_modules/cli/test/**'
+      - '.github/workflows/bzl-changes.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.bzl'
+      - '**/BUILD.bazel'
+      - '**/BUILD'
+      - 'MODULE.bazel'
+      - 'WORKSPACE'
+      - 'tools/ci/**'
+      - 'npm_modules/cli/test/**'
+      - '.github/workflows/bzl-changes.yml'
+
+jobs:
+  smoke-test:
+    name: Valdi Smoke Tests
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      
+      - name: Install Bazel and watchman
+        run: |
+          brew install bazelisk watchman
+          bazel --version
+          watchman --version
+      
+      - name: Install Valdi CLI
+        run: |
+          cd npm_modules/cli
+          npm install
+          npm run cli:install
+      
+      - name: Run smoke tests
+        run: ./tools/ci/bootstrap_app.sh
+        env:
+          OPEN_SOURCE_DIR: ${{ github.workspace }}
+          PROJECT_ROOT: /tmp/valdi_app
+      
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: |
+            /tmp/valdi_app/*.log
+            /tmp/valdi_app/config.yaml
+            /tmp/valdi_app/WORKSPACE
+            /tmp/valdi_app/.bazelrc
+          retention-days: 5
+
+  validate-bazel:
+    name: Validate Bazel Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+      
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+      
+      - name: Install Android SDK components and set NDK path
+        run: |
+          # Install required SDK components
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-36"
+          sdkmanager "build-tools;34.0.0"
+          sdkmanager "ndk;23.0.7599858"
+          
+          # Set Android environment variables
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/23.0.7599858" >> $GITHUB_ENV
+      
+      - name: Setup Bazel
+        run: |
+          wget https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
+          chmod +x bazelisk-linux-amd64
+          sudo mv bazelisk-linux-amd64 /usr/local/bin/bazel
+          sudo ln -s /usr/local/bin/bazel /usr/local/bin/bzl
+          bazel --version
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          # Core dependencies (matching valdi dev_setup for Linux)
+          sudo apt-get install -y \
+            libboost-all-dev \
+            git-lfs \
+            libfontconfig1-dev \
+            zlib1g-dev
+          
+          # Install libtinfo5 for LLVM/Clang toolchain (Ubuntu 24.04+ doesn't have it in apt)
+          if ! sudo apt-get install -y libtinfo5 2>/dev/null; then
+            echo "libtinfo5 not available in apt, downloading from Ubuntu 22.04 archive..."
+            wget http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+            sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+            rm libtinfo5_6.3-2ubuntu0.1_amd64.deb
+          fi
+          
+          # Initialize git-lfs
+          git lfs install
+      
+      - name: Free disk space
+        run: |
+          # Remove unnecessary files to free up disk space
+          # Note: We keep Android SDK as it will be set up properly by setup-android action
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          df -h
+      
+      - name: Setup environment and install Valdi CLI
+        run: |
+          # Setup npm global directory
+          mkdir -p ~/.npm-global/lib
+          npm config set prefix '~/.npm-global'
+          npm install -g npm@8
+          export PATH=~/.npm-global/bin:$PATH
+          
+          # Install Valdi CLI
+          cd npm_modules/cli
+          npm run cli:install
+          valdi --help
+        
+      - name: Test exported library
+        run: ./tools/ci/test_exported_lib.sh
+      
+      - name: Build core targets and run tests
+        run: ./tools/ci/bazel_build.sh
+

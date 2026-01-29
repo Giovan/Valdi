@@ -17,7 +17,7 @@ def local_or_nested_repository(workspace_root, name, path):
 def setup_dependencies(workspace_root = None):
     native.android_sdk_repository(
         name = "androidsdk",
-        api_level = 35,  # The API version for Android compileSdk
+        api_level = 36,  # The API version for Android compileSdk
         build_tools_version = "34.0.0",
     )
 
