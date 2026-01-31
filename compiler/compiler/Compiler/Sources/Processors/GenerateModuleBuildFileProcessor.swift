@@ -37,6 +37,8 @@ private struct ModuleBuildTargetConfig {
     let downloadableAssets: Bool
     let downloadableSources: Bool
     let singleFileCodegen: Bool
+    let hasIOSExports: Bool
+    let hasAndroidExports: Bool
 
     let iosDeps: [String]
 
@@ -193,6 +195,13 @@ private struct ModuleBuildFile {
             module_yaml = "module.yaml",
             single_file_codegen = \(config.singleFileCodegen ? "True" : "False"),
         """)
+
+        if !config.hasIOSExports || !config.hasAndroidExports {
+            contents.append("""
+            has_ios_exports = \(config.hasIOSExports ? "True" : "False"),
+            has_android_exports = \(config.hasAndroidExports ? "True" : "False"),
+        """)
+        }
 
         func maybeAppendDepsSequence(_ sequence: [String], attributeName: String) {
             if !sequence.isEmpty {
@@ -368,8 +377,16 @@ private struct SourceDirTracking {
     mutating func append(_ item: CompilationItem) {
         items.append(item)
 
-        if item.relativeBundleURL.pathComponents.count > 1 {
-            let sourceDir = item.relativeBundleURL.pathComponents[0]
+        let pathComponents = item.relativeBundleURL.pathComponents
+        let isTsConfig = item.sourceURL.lastPathComponent == "tsconfig.json"
+        let isParentReference = pathComponents.first == ".."
+        
+        // Special handling for tsconfig.json:
+        // - If it's in a parent directory (starts with ".."), treat as a file
+        // - If it's at the root level (single component), treat as a file
+        // - If it's nested in a source directory (e.g., src/lib/tsconfig.json), treat as part of that source dir
+        if pathComponents.count > 1 && !(isTsConfig && isParentReference) {
+            let sourceDir = pathComponents[0]
             if !supportedSourceDirectories.contains(sourceDir) {
                 logger.warn("!!! Unusual source directory '\(sourceDir)' for item \(item.relativeProjectPath)")
             }
@@ -384,6 +401,7 @@ private struct SourceDirTracking {
             //    Strings.d.ts
             //    Valdi.ignore.ts
             //    Networking.d.ts
+            // OR tsconfig.json that's either at root level or in parent directory (../tsconfig.json)
             if item.bundleInfo.isRoot {
                 logger.warn("Unusual source directory '<root>' for item \(item.relativeProjectPath)")
             } else {
@@ -406,11 +424,13 @@ final class GenerateModuleBuildFileProcessor: CompilationProcessor {
     private let logger: ILogger
     private let projectConfig: ValdiProjectConfig
     private let compilerConfig: CompilerConfig
+    private let nativeCodeGenerationManager: NativeCodeGenerationManager?
 
-    init(logger: ILogger, projectConfig: ValdiProjectConfig, compilerConfig: CompilerConfig) {
+    init(logger: ILogger, projectConfig: ValdiProjectConfig, compilerConfig: CompilerConfig, nativeCodeGenerationManager: NativeCodeGenerationManager? = nil) {
         self.logger = logger
         self.projectConfig = projectConfig
         self.compilerConfig = compilerConfig
+        self.nativeCodeGenerationManager = nativeCodeGenerationManager
     }
 
     private func hasNonTSConfigJsonFile(jsonSourceDirs: SourceDirTracking) -> Bool {
@@ -539,6 +559,24 @@ final class GenerateModuleBuildFileProcessor: CompilationProcessor {
         let iosOutputTarget = bundleInfo.outputTarget(platform: .ios)
         let androidOutputTarget = bundleInfo.outputTarget(platform: .android)
 
+        // Determine if the module has native exports
+        // Default to true for safety if annotation processing hasn't run or failed
+        var hasIOSExports: Bool
+        var hasAndroidExports: Bool
+        if let manager = nativeCodeGenerationManager {
+            hasIOSExports = manager.hasIOSExports(for: bundleInfo)
+            hasAndroidExports = manager.hasAndroidExports(for: bundleInfo)
+        } else {
+            // No manager available (shouldn't happen in normal flow, but default to safe value)
+            hasIOSExports = true
+            hasAndroidExports = true
+        }
+        
+        // Also check Vue files for native exports
+        let vueExports = checkVueFilesForNativeExports(legacyVueSourceDirs)
+        hasIOSExports = hasIOSExports || vueExports.hasIOSExports
+        hasAndroidExports = hasAndroidExports || vueExports.hasAndroidExports
+
         let config = ModuleBuildTargetConfig(projectConfig: self.projectConfig,
                                              name: moduleName,
                                              iosModuleName: bundleInfo.iosModuleName,
@@ -565,6 +603,8 @@ final class GenerateModuleBuildFileProcessor: CompilationProcessor {
                                              downloadableAssets: bundleInfo.downloadableAssets,
                                              downloadableSources: bundleInfo.downloadableSources,
                                              singleFileCodegen: bundleInfo.singleFileCodegen,
+                                             hasIOSExports: hasIOSExports,
+                                             hasAndroidExports: hasAndroidExports,
                                              iosDeps: iosDeps,
                                              excludePatterns: bundleInfo.inclusionConfig.excludePatterns,
                                              excludeGlobs: bundleInfo.excludeGlobs,
@@ -611,6 +651,61 @@ final class GenerateModuleBuildFileProcessor: CompilationProcessor {
             let buildFileItem = selectedItem.item.with(newKind: .finalFile(finalFile))
             return [selectedItem.item, buildFileItem]
         }
+    }
+    
+    /// Scans Vue files for native exports that can be defined via:
+    /// 1. <class-mapping> sections with ios= or android= attributes
+    /// 2. Standard Typescript export annotations (from ValdiAnnotationType.nativeExportAnnotationNames)
+    private func checkVueFilesForNativeExports(_ vueSourceDirs: SourceDirTracking) -> (hasIOSExports: Bool, hasAndroidExports: Bool) {
+        var hasIOSExports = false
+        var hasAndroidExports = false
+        
+        // Regex patterns to detect iOS and Android exports in Vue files
+        // Pattern 1: <class-mapping> sections with ios= or android= attributes
+        // Matches: <SomeView ios="SCClassName" android="com.package.ClassName"/>
+        let classMappingIosPattern = try? NSRegularExpression(pattern: #"\bios\s*=\s*["\'][^"\']+["\']"#, options: [])
+        let classMappingAndroidPattern = try? NSRegularExpression(pattern: #"\bandroid\s*=\s*["\'][^"\']+["\']"#, options: [])
+        
+        // Pattern 2: TypeScript annotations with ios/android parameters
+        // Build regex pattern dynamically from ValdiAnnotationType.nativeExportAnnotationNames
+        // This ensures that if new annotation types are added, they will be automatically included
+        let annotationNames = ValdiAnnotationType.nativeExportAnnotationNames.joined(separator: "|")
+        let annotationIosPattern = try? NSRegularExpression(pattern: "@(?:\(annotationNames))\\s*\\([^)]*\\bios\\s*:\\s*['\"][^'\"]+['\"]", options: [])
+        let annotationAndroidPattern = try? NSRegularExpression(pattern: "@(?:\(annotationNames))\\s*\\([^)]*\\bandroid\\s*:\\s*['\"][^'\"]+['\"]", options: [])
+        
+        for item in vueSourceDirs.items {
+            guard item.sourceURL.pathExtension == FileExtensions.vue else { continue }
+            
+            // Read the Vue file content
+            guard let content = try? String(contentsOf: item.sourceURL, encoding: .utf8) else { continue }
+            
+            let range = NSRange(content.startIndex..<content.endIndex, in: content)
+            
+            // Check for iOS exports (class-mapping or annotations)
+            if !hasIOSExports {
+                if let pattern = classMappingIosPattern, pattern.firstMatch(in: content, options: [], range: range) != nil {
+                    hasIOSExports = true
+                } else if let pattern = annotationIosPattern, pattern.firstMatch(in: content, options: [], range: range) != nil {
+                    hasIOSExports = true
+                }
+            }
+            
+            // Check for Android exports (class-mapping or annotations)
+            if !hasAndroidExports {
+                if let pattern = classMappingAndroidPattern, pattern.firstMatch(in: content, options: [], range: range) != nil {
+                    hasAndroidExports = true
+                } else if let pattern = annotationAndroidPattern, pattern.firstMatch(in: content, options: [], range: range) != nil {
+                    hasAndroidExports = true
+                }
+            }
+            
+            // Early exit if both exports are found
+            if hasIOSExports && hasAndroidExports {
+                break
+            }
+        }
+        
+        return (hasIOSExports, hasAndroidExports)
     }
 
 }
