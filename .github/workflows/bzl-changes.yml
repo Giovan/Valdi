@@ -76,6 +76,10 @@ jobs:
             /tmp/valdi_app/.bazelrc
           retention-days: 5
 
+  # Note: Linux CLI distribution tests moved to dedicated workflow:
+  # .github/workflows/test-cli-linux.yml
+  # This avoids duplication and provides better test organization.
+
   validate-bazel:
     name: Validate Bazel Build
     runs-on: ubuntu-latest
